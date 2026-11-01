@@ -11,6 +11,7 @@ AR = {
     "Menu": "القائمة",
     "SOS": "استغاثة",
     "Light": "فاتح",
+    "Your session expired. Please try again.": "انتهت صلاحية الجلسة. حاول مرة أخرى.",
     "Send test alert": "إرسال تنبيه تجريبي",
     "Telegram is not switched on.": "تيليجرام غير مفعّل.",
     "Missing in Vercel:": "ينقص في Vercel:",

@@ -72,7 +72,7 @@ trf-emergency-relief/
 ├── translations.py         # English → Arabic interface text
 ├── templates/              # HTML pages (Jinja2)
 ├── static/                 # CSS, JavaScript, TRF logo and icons
-├── tests/                  # 173 automated unit tests
+├── tests/                  # 174 automated unit tests
 ├── samples/                # Example CSV files for the three imports
 ├── requirements.txt
 └── .env.example
@@ -188,7 +188,7 @@ Example: 50 food, two high requests for 60 and 40 → **30 and 20**. 7 kits, thr
 
 ## 11. Tests
 
-`python -m unittest` runs **173 tests**:
+`python -m unittest` runs **174 tests**:
 
 | File | Covers |
 |---|---|

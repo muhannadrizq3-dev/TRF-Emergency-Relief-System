@@ -1,3 +1,4 @@
+import hashlib
 import hmac
 import logging
 import os
@@ -221,13 +222,20 @@ def build_overview(store, user=None):
     }
 
 
+def stable_fallback_secret():
+    seeds = [os.environ.get(name, "") for name in
+             ("TELEGRAM_BOT_TOKEN", "VERCEL_PROJECT_ID", "VERCEL_GIT_REPO_ID", "VERCEL_PROJECT_PRODUCTION_URL")]
+    seeds.extend(password_hash for _, _, _, password_hash in settings.TEAM_ACCOUNTS)
+    return hashlib.sha256(("trf-session|" + "|".join(seeds)).encode()).hexdigest()
+
+
 def create_app(store=None, testing=False, notifier=None, mailer=None, team_accounts=None, app=None):
     app = app or Flask(__name__)
-    secret = os.environ.get("SECRET_KEY")
+    secret = os.environ.get("SECRET_KEY", "").strip()
     if not secret and testing:
         secret = "test-secret"
     elif not secret:
-        secret = secrets.token_hex(32)
+        secret = stable_fallback_secret()
     app.config.update(
         SECRET_KEY=secret,
         TESTING=testing,
@@ -263,7 +271,12 @@ def create_app(store=None, testing=False, notifier=None, mailer=None, team_accou
             sent = request.form.get("csrf_token", "")
             expected = session.get("csrf_token", "")
             if not expected or not hmac.compare_digest(sent, expected):
-                abort(400, description="Your form expired. Reload the page and try again.")
+                session["csrf_token"] = secrets.token_urlsafe(32)
+                flash(translate("Your session expired. Please try again.", g.lang), "info")
+                back_to = request.path if request.path in ("/login", "/signup", "/forgot-password") else None
+                if g.user and not back_to:
+                    back_to = url_for("dashboard")
+                return redirect(back_to or url_for("login"))
 
     @app.after_request
     def security_headers(resp):

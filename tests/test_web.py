@@ -196,7 +196,13 @@ class SignupFormTests(WebTestCase):
 class SecurityTests(WebTestCase):
     def test_post_without_csrf_rejected(self):
         resp = self.client.post("/login", data={"login": "x", "password": "y"})
-        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.status_code, 302)
+        self.assertIn("/login", resp.headers["Location"])
+        self.assertIn("session expired", self.client.get("/login").get_data(as_text=True))
+
+    def test_server_copies_share_the_same_key_without_secret_key(self):
+        import web_app
+        self.assertEqual(web_app.stable_fallback_secret(), web_app.stable_fallback_secret())
 
     def test_security_headers_present(self):
         resp = self.client.get("/login")
