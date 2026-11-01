@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}{{ code }}{% endblock %}
+{% block content %}
+<div class="error-code">{{ code }}</div>
+<h1>{{ {404: _("Page not found"), 403: _("You don't have access to this"), 400: _("Something was wrong with that request"), 413: _("That file is too big")}.get(code, _("Something went wrong")) }}</h1>
+<p class="field">{{ message }}</p>
+<a class="btn" href="{{ url_for('index') }}">{{ _("Go to the overview") }}</a>
+{% endblock %}

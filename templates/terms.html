@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Terms & Conditions") }}{% endblock %}
+{% block content %}
+{% if lang == 'ar' %}
+<h1>الشروط والأحكام</h1>
+<p>هذا الموقع مشروع تعليمي أُنشئ لـ{{ settings.COMPETITION }} من قبل فريق {{ settings.TEAM_NAME }} ({{ settings.SCHOOL_NAME }}). ليس خدمة طوارئ حقيقية ولا يرتبط بأي جهة حكومية.</p>
+<h2>في حالة الطوارئ الحقيقية</h2>
+<p>اتصل بالرقم 999 للشرطة، أو 998 للإسعاف، أو 997 للدفاع المدني. لا تعتمد على هذا الموقع لطلب المساعدة.</p>
+<h2>الاستخدام المقبول</h2>
+<p>استخدم الموقع للعرض والتعلم فقط. لا تُدخل بيانات شخصية حقيقية أو حساسة. لا تحاول اختراق الموقع أو تعطيله.</p>
+<h2>الحسابات</h2>
+<p>أنت مسؤول عن الحفاظ على سرية كلمة المرور. يمكن للمنسق تغيير الأدوار وإعادة تعيين كلمات المرور.</p>
+<h2>البيانات</h2>
+<p>قد تُحذف بيانات العرض أو يُعاد ضبطها في أي وقت. تُقدَّم الخدمة كما هي دون ضمان للتوفر أو الدقة.</p>
+{% else %}
+<h1>Terms &amp; Conditions</h1>
+<p>This website is an educational project built for the {{ settings.COMPETITION }} by {{ settings.TEAM_NAME }} ({{ settings.SCHOOL_NAME }}, {{ settings.SCHOOL_PLACE }}). It is not a real emergency service and is not connected to any government authority.</p>
+<h2>In a real emergency</h2>
+<p>Call 999 for Police, 998 for Ambulance or 997 for Civil Defence. Do not rely on this site to get help.</p>
+<h2>Acceptable use</h2>
+<p>Use the site for demonstration and learning only. Do not enter real personal or sensitive information. Do not try to break into, overload or disrupt the site.</p>
+<h2>Accounts</h2>
+<p>Keep your password private. The Coordinator can change roles and reset passwords. Five wrong passwords in a row lock an account for 15 minutes.</p>
+<h2>Data</h2>
+<p>Demo data can be deleted or reset at any time. The service is provided as it is, with no guarantee of availability or accuracy.</p>
+{% endif %}
+<p class="muted small">{{ _("Team") }}: {{ settings.TEAM_MEMBERS | join(", ") }}</p>
+{% endblock %}

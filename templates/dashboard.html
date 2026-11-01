@@ -1,0 +1,495 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, priority_tag, level_badge, lang_button, theme_button, flashes with context %}
+{% block title %}{{ _("Overview") }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">{% endblock %}
+{% block body %}
+<header class="appbar">
+  <div class="inner">
+    <a class="brandline" href="{{ url_for('dashboard') }}">
+      <img src="{{ url_for('static', filename='logo.png') }}" alt="{{ settings.APP_NAME }} logo" width="56" height="56">
+      <span>{{ _("Emergency Relief") }}</span>
+    </a>
+    <button class="btn btn-ghost pill-btn menu-btn" type="button" data-menu aria-controls="mainnav" aria-expanded="false">{{ icon("menu") }}<span class="sr-only">{{ _("Menu") }}</span></button>
+    <nav class="mainnav" id="mainnav" aria-label="{{ _('Sections') }}">
+      <a href="#overview">{{ _("Overview") }}</a>
+      <a href="#inventory">{{ _("Inventory") }}</a>
+      <a href="#requests">{{ _("Requests") }}</a>
+      <a href="#shelters">{{ _("Shelters") }}</a>
+      <a href="#reports">{{ _("Reports") }}</a>
+      {% if can('import_csv') %}<a href="#data">{{ _("Data") }}</a>{% endif %}
+      <a href="#activity">{{ _("Activity") }}</a>
+      <a href="#team">{{ _("Team") }}</a>
+    </nav>
+    <div class="tools">
+      {% if can('send_sos') %}<a class="btn btn-sos pill-btn" href="{{ url_for('sos') }}">{{ icon("bell") }}{{ _("SOS") }}</a>{% endif %}
+      {{ lang_button(request.path) }}
+      {{ theme_button() }}
+      <div class="who">
+        <span class="avatar">{{ user_initials }}</span>
+        <div><strong>{{ current_user.display_name }}</strong><span>{{ _(current_user.role) }}</span></div>
+      </div>
+      <form method="post" action="{{ url_for('logout') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-ghost pill-btn" type="submit">{{ _("Log out") }}</button>
+      </form>
+    </div>
+  </div>
+</header>
+
+<main class="page">
+  <section class="hero" id="overview">
+    <div class="wrap">
+      <p class="eyebrow">{{ _("Emergency resource management") }}</p>
+      <h1>{{ _("Welcome back, {name}").format(name=first_name) }}</h1>
+      <p>{{ _("Track emergency supplies, handle shelter requests by urgency, and dispatch relief where it's needed most.") }}</p>
+      <div class="hero-row">
+        <div class="pills">
+          {% if o.sos_waiting %}
+            <a class="pill" href="#requests"><span class="dot dot-alert"></span>{{ _("{n} SOS waiting").format(n=o.sos_waiting) }}</a>
+          {% elif o.shortages %}
+            <a class="pill" href="#reports"><span class="dot dot-alert"></span>{{ _("Shortages need attention") }}</a>
+          {% else %}
+            <span class="pill"><span class="dot dot-good"></span>{{ _("All systems normal") }}</span>
+          {% endif %}
+          <span class="pill">{{ icon("shield") }}{{ _({"coordinator": "You are a Coordinator: you can manage everything.",
+                                                        "shelter_staff": "You are Shelter staff: you can send and manage your requests.",
+                                                        "volunteer": "You are a Volunteer: you can view everything."}[current_user.role]) }}</span>
+        </div>
+        {% if can('create_request') %}
+          <a class="btn btn-white" href="#new-request">{{ icon("plus") }}{{ _("New request") }}</a>
+        {% endif %}
+      </div>
+    </div>
+  </section>
+
+  <div class="wrap">
+    <div class="stats">
+      <div class="stat">
+        <span class="icon-box">{{ icon("box") }}</span>
+        <div><div class="stat-label">{{ _("Supplies in stock") }}</div>
+          <div class="stat-value">{{ o.stock_total }}</div>
+          <div class="muted">{{ _("All supplies well stocked") if not o.low_supplies else _("{n} running low").format(n=o.low_supplies|length) }}</div></div>
+      </div>
+      <div class="stat">
+        <span class="icon-box blue">{{ icon("alert") }}</span>
+        <div><div class="stat-label">{{ _("Requests") }}</div>
+          <div class="stat-value">{{ o.request_total }}</div>
+          <div class="muted">{{ _("Received from shelters") }}</div></div>
+      </div>
+      <div class="stat">
+        <span class="icon-box">{{ icon("truck") }}</span>
+        <div><div class="stat-label">{{ _("Waiting to dispatch") }}</div>
+          <div class="stat-value">{{ o.waiting }}</div>
+          <div class="muted">{{ _("{n} delivered so far").format(n=o.units_delivered) }}</div></div>
+      </div>
+      <div class="stat">
+        <span class="icon-box">{{ icon("chart") }}</span>
+        <div><div class="stat-label">{{ _("Shortages") }}</div>
+          <div class="stat-value">{{ o.shortages|length }}</div>
+          <div class="muted">{{ _("Every request can be filled") if not o.shortages else _("Not enough stock for some requests") }}</div></div>
+      </div>
+    </div>
+
+    {{ flashes("page-flashes") }}
+
+    {% if temp_password %}
+      <ul class="flashes"><li class="flash flash-info">{{ _("Temporary password for {name}:").format(name=temp_password.name) }}
+        <span class="temp-pass">{{ temp_password.password }}</span> — {{ _("give it to them privately; it is shown only once.") }}</li></ul>
+    {% endif %}
+
+    <div class="grid-2">
+      <section class="card" id="inventory">
+        <div class="card-head"><span class="icon-box small-box">{{ icon("box") }}</span><h2>{{ _("Inventory") }}</h2></div>
+        <p class="card-sub">{{ _("Bars show each supply against a healthy level (five times its low-stock level).") }}</p>
+        {% for s in o.supplies %}
+          <div class="stock">
+            <div class="stock-top">
+              <span class="stock-name">{{ s.label }}</span>
+              <span class="stock-qty">{{ s.quantity }} {{ level_badge(s.level) }}</span>
+            </div>
+            <div class="bar {{ s.level }}" data-fill="{{ s.percent }}" role="img"
+                 aria-label="{{ s.quantity }} {{ s.unit }}, {{ s.percent }}%"><span></span></div>
+            {% if can('manage_stock') %}
+            <details class="stock-edit">
+              <summary>{{ _("Edit stock or low-stock level") }}</summary>
+              <form method="post" action="{{ url_for('set_level', supply_id=s.id) }}" class="form-grid cols-3">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="field"><label for="q{{ s.id }}">{{ _("Quantity") }}</label>
+                  <input id="q{{ s.id }}" name="quantity" type="number" min="0" step="1" value="{{ s.quantity }}" required></div>
+                <div class="field"><label for="t{{ s.id }}">{{ _("Low-stock level") }}</label>
+                  <input id="t{{ s.id }}" name="threshold" type="number" min="0" step="1" value="{{ s.threshold }}" required></div>
+                <button class="btn btn-ghost" type="submit">{{ _("Save") }}</button>
+              </form>
+              <form method="post" action="{{ url_for('delete_supply', supply_id=s.id) }}" data-confirm="{{ _('Remove this supply type?') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-ghost btn-small mt" type="submit">{{ _("Remove supply type") }}</button>
+              </form>
+            </details>
+            {% endif %}
+          </div>
+        {% else %}
+          <p class="empty">{{ _("No supplies yet.") }}</p>
+        {% endfor %}
+
+        {% if can('manage_stock') %}
+        <hr class="divider">
+        <h3 class="sub-title">{{ _("Add supplies") }}</h3>
+        <form method="post" action="{{ url_for('add_stock') }}" class="form-grid cols-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="field"><label for="add-supply">{{ _("Supply") }}</label>
+            <select id="add-supply" name="supply_type_id" required>
+              {% for s in o.supplies %}<option value="{{ s.id }}">{{ s.label }}</option>{% endfor %}
+            </select></div>
+          <div class="field"><label for="add-qty">{{ _("Quantity") }}</label>
+            <input id="add-qty" name="quantity" type="number" min="1" step="1" required></div>
+          <button class="btn" type="submit">{{ _("Add to stock") }}</button>
+        </form>
+        <hr class="divider">
+        <h3 class="sub-title">{{ _("New supply type") }}</h3>
+        <p class="muted field">{{ _("For example blankets, tents or medicine.") }}</p>
+        <form method="post" action="{{ url_for('supply_types') }}" class="form-grid cols-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="field"><label for="new-name">{{ _("Supply name") }}</label>
+            <input id="new-name" name="name" type="text" maxlength="80" required></div>
+          <div class="field"><label for="new-qty">{{ _("Starting quantity") }}</label>
+            <input id="new-qty" name="quantity" type="number" min="0" step="1" value="0"></div>
+          <button class="btn btn-deep" type="submit">{{ _("Add supply type") }}</button>
+        </form>
+        {% endif %}
+      </section>
+
+      <section class="card" id="new-request">
+        <div class="card-head"><span class="icon-box small-box">{{ icon("alert") }}</span><h2>{{ _("New emergency request") }}</h2></div>
+        <p class="card-sub">{{ _("Critical requests are always dispatched first.") }}</p>
+        {% if can('create_request') %}
+        <form method="post" action="{{ url_for('new_request') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="form-grid cols-3">
+            <div class="field"><label for="r-shelter">{{ _("Shelter") }}</label>
+              <select id="r-shelter" name="shelter_id" required>
+                {% for s in o.shelters %}<option value="{{ s.id }}" {{ 'selected' if current_user.shelter_id == s.id }}>{{ s.name }}</option>{% endfor %}
+              </select></div>
+            <div class="field"><label for="r-supply">{{ _("Supply") }}</label>
+              <select id="r-supply" name="supply_type_id" required>
+                {% for s in o.supplies %}<option value="{{ s.id }}">{{ s.label }}</option>{% endfor %}
+              </select></div>
+            <div class="field"><label for="r-qty">{{ _("Quantity") }}</label>
+              <input id="r-qty" name="quantity" type="number" min="1" max="{{ settings.MAX_REQUEST_QUANTITY }}" step="1" required></div>
+          </div>
+          <div class="form-grid cols-3 mt">
+            <div class="field"><label for="r-priority">{{ _("Priority") }}</label>
+              <select id="r-priority" name="priority">
+                {% for level in [4, 3, 2, 1] %}<option value="{{ priorities[level] }}">{{ _(priorities[level]|capitalize) }}</option>{% endfor %}
+              </select></div>
+            <div class="field"><label for="r-note">{{ _("Note (optional)") }}</label>
+              <input id="r-note" name="note" type="text" maxlength="{{ settings.MAX_NOTE_LENGTH }}"></div>
+            <button class="btn btn-deep" type="submit" {{ 'disabled' if not o.shelters or not o.supplies }}>{{ _("Create request") }}</button>
+          </div>
+        </form>
+        {% if not o.shelters or not o.supplies %}<p class="hint">{{ _("Add at least one shelter and one supply first.") }}</p>{% endif %}
+        {% else %}
+        <p class="muted">{{ _("Volunteers can view requests but cannot create them.") }}</p>
+        {% endif %}
+        <p class="note">🚨 {{ _("Critical requests send a Telegram alert to the response team. This is only a demo: alerts go to the team's test Telegram chat. A real system would use official emergency channels.") }}</p>
+        {% if can('manage_users') %}
+          <p class="hint">{{ _("Alert channels switched on:") }}
+            {{ channels|map('capitalize')|join(', ') if channels else _("none yet. Alerts go to the fallback log until you add them (see the README).") }}</p>
+          <form method="post" action="{{ url_for('test_alert') }}" class="mt">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-ghost btn-small" type="submit">{{ icon("bell") }}{{ _("Send test alert") }}</button>
+          </form>
+        {% endif %}
+      </section>
+    </div>
+
+    <section class="card" id="requests">
+      <div class="card-head">
+        <span class="icon-box small-box">{{ icon("truck") }}</span>
+        <h2 class="grow">{{ _("Requests & dispatch") }}</h2>
+        {% if can('dispatch') and o.open_requests %}
+        <form method="post" action="{{ url_for('auto_dispatch') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn" type="submit">{{ icon("truck") }}{{ _("Dispatch all fairly") }}</button>
+        </form>
+        {% endif %}
+      </div>
+      <p class="card-sub">{{ _("Pending requests are listed most urgent first. A waiting request rises one priority level every 24 hours.") }}</p>
+      {% if o.requests %}
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>{{ _("Shelter") }}</th><th>{{ _("Supply") }}</th><th class="num">{{ _("Delivered") }}</th>
+            <th>{{ _("Priority") }}</th><th class="num">{{ _("Waiting") }}</th><th>{{ _("Status") }}</th><th>{{ _("Actions") }}</th>
+          </tr></thead>
+          <tbody>
+          {% for r in o.requests %}
+            <tr class="req p-{{ r.priority_label }}{{ ' closed' if r.status not in settings.OPEN_STATUSES }}">
+              <td><strong>{{ r.shelter_name }}</strong>{% if r.is_sos %} <span class="tag tag-sos">SOS</span>{% endif %}
+                {% if r.note %}<div class="small muted">{{ r.note }}</div>{% endif %}
+                <div class="small muted">{{ _("By") }} {{ r.created_by_name or "—" }}</div></td>
+              <td>{{ r.supply_name|title }}</td>
+              <td class="num">{{ r.delivered }} / {{ r.quantity }}</td>
+              <td>{{ priority_tag(r.priority_label, r.escalated) }}</td>
+              <td class="num">{{ r.hours_waiting }} {{ _("h") }}</td>
+              <td><span class="tag tag-muted">{{ _(r.status) }}</span></td>
+              <td>
+                {% if r.status in settings.OPEN_STATUSES %}
+                <div class="actions">
+                  {% if can('dispatch') %}
+                  <form method="post" action="{{ url_for('dispatch_one', request_id=r.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input name="amount" type="number" min="1" step="1" placeholder="{{ r.remaining }}" aria-label="{{ _('Amount to send (blank sends all that is needed)') }}">
+                    <button class="btn btn-small" type="submit">{{ _("Dispatch") }}</button>
+                  </form>
+                  {% endif %}
+                  {% if can_modify(r) %}
+                  <a class="btn btn-ghost btn-small" href="{{ url_for('edit_request', request_id=r.id) }}">{{ _("Edit") }}</a>
+                  <form method="post" action="{{ url_for('cancel_request', request_id=r.id) }}" data-confirm="{{ _('Cancel this request?') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-ghost btn-small" type="submit">{{ _("Cancel") }}</button>
+                  </form>
+                  {% endif %}
+                </div>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <p class="empty">{{ _("No requests yet.") }}
+          {% if can('create_request') %}<a href="#new-request">{{ _("Create the first one") }}</a>{% endif %}</p>
+      {% endif %}
+      {% if history %}
+        <hr class="divider">
+        <h3 class="sub-title">{{ _("Recent deliveries") }}</h3>
+        <ul class="timeline">
+          {% for d in history %}
+            <li><span class="icon-box small-box">{{ icon("truck") }}</span>
+              <span class="grow"><strong>{{ d.quantity }} {{ d.supply_name }}</strong> → {{ d.shelter_name }}
+                <span class="muted">· {{ d.by_name or "—" }}</span></span>
+              <time>{{ uae_time(d.created_at) }}</time></li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </section>
+
+    <section class="card" id="shelters">
+      <div class="card-head"><span class="icon-box small-box">{{ icon("pin") }}</span><h2>{{ _("Shelters") }}</h2></div>
+      <p class="card-sub">{{ _("Red pins have requests waiting. Green pins are fully supplied.") }}</p>
+      <div class="shelter-layout">
+        <div id="shelter-map" class="map" data-src="{{ url_for('map_data') }}" data-pick="{{ 'yes' if can('manage_shelters') else 'no' }}"
+             data-none="{{ _('No pending requests') }}" role="region" aria-label="{{ _('Shelter map') }}"></div>
+        <ul class="shelter-list">
+          {% for s in o.shelters %}
+            <li class="shelter-item">
+              <span class="dot {{ 'dot-red' if s.waiting else 'dot-green' }}"></span>
+              <div class="grow"><strong>{{ s.name }}</strong>
+                <div class="muted">{{ s.area or "—" }} · {{ _("No pending requests") if not s.waiting else _("{n} waiting").format(n=s.waiting) }}</div></div>
+              {% if can('manage_shelters') %}
+              <form method="post" action="{{ url_for('delete_shelter', shelter_id=s.id) }}" data-confirm="{{ _('Remove this shelter?') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn btn-ghost btn-small" type="submit">{{ _("Remove") }}</button>
+              </form>
+              {% endif %}
+            </li>
+          {% else %}
+            <li class="empty">{{ _("No shelters yet.") }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% if can('manage_shelters') %}
+      <hr class="divider">
+      <h3 class="sub-title">{{ _("Add a shelter") }}</h3>
+      <p class="muted field">{{ _("Click the map to set the location, or type the coordinates.") }}</p>
+      <form method="post" action="{{ url_for('add_shelter') }}" class="form-grid cols-5">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="field"><label for="sh-name">{{ _("Shelter name") }}</label><input id="sh-name" name="name" type="text" maxlength="80" required></div>
+        <div class="field"><label for="sh-area">{{ _("Area") }}</label><input id="sh-area" name="area" type="text" maxlength="80"></div>
+        <div class="field"><label for="latitude">{{ _("Latitude") }}</label><input id="latitude" name="latitude" type="text" inputmode="decimal" required></div>
+        <div class="field"><label for="longitude">{{ _("Longitude") }}</label><input id="longitude" name="longitude" type="text" inputmode="decimal" required></div>
+        <button class="btn btn-deep" type="submit">{{ _("Add a shelter") }}</button>
+      </form>
+      {% endif %}
+    </section>
+
+    <section class="card" id="reports">
+      <div class="card-head"><span class="icon-box small-box">{{ icon("chart") }}</span><h2>{{ _("Reports") }}</h2></div>
+      <p class="card-sub">{{ _("How well current stock covers what shelters need.") }}</p>
+      <div class="rate">
+        <span class="rate-num">{{ o.fulfilment_pct }}%</span>
+        <div class="grow">
+          <strong>{{ _("Fulfilment rate:") }}</strong> <span class="muted">{{ _("{a} of {b} requests delivered").format(a=o.fulfilled, b=o.live_total) }}</span>
+          <div class="bar" data-fill="{{ o.fulfilment_pct }}"><span></span></div>
+        </div>
+      </div>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h3>{{ _("Stock vs pending demand") }}</h3>
+          {% if o.stock_vs_demand %}
+          <div class="legend"><span><i class="sw-stock"></i>{{ _("In stock") }}</span><span><i class="sw-demand"></i>{{ _("Pending demand") }}</span></div>
+          {% for x in o.stock_vs_demand %}
+            <div class="hbar-row"><span>{{ x.label }}</span>
+              <div class="hbar-pair">
+                <div class="hbar"><span class="stock-fill" data-fill="{{ x.stock_pct }}"></span>{{ x.stock }}</div>
+                <div class="hbar"><span class="demand-fill" data-fill="{{ x.demand_pct }}"></span>{{ x.demand }}</div>
+              </div></div>
+          {% endfor %}
+          <details><summary>{{ _("Show as a table") }}</summary>
+            <table><thead><tr><th>{{ _("Supply") }}</th><th class="num">{{ _("In stock") }}</th><th class="num">{{ _("Pending demand") }}</th></tr></thead>
+              <tbody>{% for x in o.stock_vs_demand %}<tr><td>{{ x.label }}</td><td class="num">{{ x.stock }}</td><td class="num">{{ x.demand }}</td></tr>{% endfor %}</tbody></table>
+          </details>
+          {% else %}<p class="empty">{{ _("No supplies yet.") }}</p>{% endif %}
+        </div>
+        <div class="chart-card">
+          <h3>{{ _("Requests by priority") }}</h3>
+          {% if o.waiting %}
+            {% for name, n in o.by_priority.items() %}
+              <div class="hbar-row"><span>{{ _(name|capitalize) }}</span>
+                <div class="hbar"><span class="count-fill p-{{ name }}" data-fill="{{ (100 * n / o.by_priority_max)|round|int }}"></span>{{ n }}</div></div>
+            {% endfor %}
+          {% else %}<p class="empty">{{ _("No requests yet.") }}</p>{% endif %}
+        </div>
+        <div class="chart-card">
+          <h3>{{ _("Requests by shelter") }}</h3>
+          {% if o.by_shelter %}
+            {% for name, n in o.by_shelter %}
+              <div class="hbar-row"><span>{{ name }}</span>
+                <div class="hbar"><span class="count-fill" data-fill="{{ (100 * n / o.by_shelter_max)|round|int }}"></span>{{ n }}</div></div>
+            {% endfor %}
+          {% else %}<p class="empty">{{ _("No requests yet.") }}</p>{% endif %}
+        </div>
+      </div>
+      {% if o.shortages %}
+        <p class="banner banner-bad">{{ icon("alert") }}<span>{{ _("Shortages:") }}
+          {% for x in o.shortages %}{{ x.label }} ({{ _("need") }} {{ x.demand }}, {{ _("have") }} {{ x.stock }}){{ ", " if not loop.last }}{% endfor %}.
+          {{ _("Stock will be shared fairly between requests of the same priority.") }}</span></p>
+      {% else %}
+        <p class="banner banner-ok">{{ icon("check") }}{{ _("No shortages: every pending request can be filled with current stock.") }}</p>
+      {% endif %}
+      {% if alerts %}
+        <details class="mt"><summary>{{ _("Recent alerts") }}</summary>
+          <ul class="timeline">{% for a in alerts %}{% set lines = a.message.splitlines() %}<li><span class="grow small">{{ lines[0] }}{% if lines|length > 1 %} — {{ lines[1] }}{% endif %}</span>
+            <span class="tag {{ 'tag-low' if a.delivered else 'tag-muted' }}">{{ a.channel }}</span><time>{{ uae_time(a.created_at) }}</time></li>{% endfor %}</ul>
+        </details>
+      {% endif %}
+    </section>
+
+    {% if can('import_csv') %}
+    <section class="card" id="data">
+      <div class="card-head"><span class="icon-box small-box">{{ icon("download") }}</span><h2>{{ _("Import & export") }}</h2></div>
+      <p class="card-sub">{{ _("Download the data as spreadsheets (CSV), or add many records at once.") }}</p>
+      <h3 class="sub-title">{{ _("Export as CSV") }}</h3>
+      <div class="chips field">
+        {% for kind, label in [("supplies", "Supplies"), ("requests", "Requests"), ("shelters", "Shelters"), ("activity", "Activity")] %}
+          <a class="btn btn-ghost btn-small" href="{{ url_for('export', kind=kind) }}">{{ icon("download") }}{{ _(label) }}</a>
+        {% endfor %}
+      </div>
+      <hr class="divider">
+      <h3 class="sub-title">{{ _("Import from CSV") }}</h3>
+      <p class="muted field">{{ _("The first row must hold the column names. Every row is checked first; if any row is wrong, nothing is imported.") }}</p>
+      <div class="format-grid">
+        <div class="format"><strong>{{ _("Supplies") }}</strong><code>item,quantity</code><br>{{ _("Adds to existing stock. New names become new supplies.") }}</div>
+        <div class="format"><strong>{{ _("Shelters") }}</strong><code>name,area,lat,lng</code><br>{{ _("Each shelter name must be new.") }}</div>
+        <div class="format"><strong>{{ _("Requests") }}</strong><code>shelter,item,quantity,priority</code><br>{{ _("The shelter and supply must already exist. Imported requests don't send alerts.") }}</div>
+      </div>
+      <form method="post" action="{{ url_for('import_csv') }}" enctype="multipart/form-data" class="form-grid cols-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="field"><label for="kind">{{ _("What to import") }}</label>
+          <select id="kind" name="kind">
+            <option value="supplies">{{ _("Supplies") }}</option>
+            <option value="shelters">{{ _("Shelters") }}</option>
+            <option value="requests">{{ _("Requests") }}</option>
+          </select></div>
+        <div class="field"><label for="file">{{ _("CSV file (UTF-8, up to 1 MB)") }}</label>
+          <input id="file" name="file" type="file" accept=".csv,text/csv" required></div>
+        <button class="btn btn-deep" type="submit">{{ icon("upload") }}{{ _("Import") }}</button>
+      </form>
+      <hr class="divider">
+      <h3 class="sub-title">{{ _("Demo data") }}</h3>
+      <p class="muted field">{{ _("Start a presentation from a known state. Accounts are kept.") }}</p>
+      <div class="toolbar">
+        <form method="post" action="{{ url_for('reset_demo') }}" data-confirm="{{ _('Replace all requests, supplies and shelters with the demo data?') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-deep btn-small" type="submit">{{ _("Reset to demo data") }}</button>
+        </form>
+        <form method="post" action="{{ url_for('start_empty') }}" data-confirm="{{ _('Delete all requests, supplies and shelters? Accounts are kept.') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-ghost btn-small" type="submit">{{ _("Start empty") }}</button>
+        </form>
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="card" id="activity">
+      <div class="card-head"><span class="icon-box small-box">{{ icon("clock") }}</span><h2>{{ _("Activity history") }}</h2></div>
+      <p class="card-sub">{{ _("Every change, who made it and when (UAE time).") }}</p>
+      {% if activity_rows %}
+      <ul class="timeline">
+        {% for a in activity_rows %}
+          <li><span class="avatar avatar-sm">{{ a.initials }}</span>
+            <span class="grow"><strong>{{ a.user_name }}</strong> {{ a.action }}</span>
+            <time datetime="{{ a.created_at }}">{{ a.uae_time }}</time></li>
+        {% endfor %}
+      </ul>
+      {% else %}<p class="empty">{{ _("Nothing has happened yet.") }}</p>{% endif %}
+    </section>
+
+    <section class="card" id="team">
+      <div class="card-head"><span class="icon-box small-box">{{ icon("users") }}</span><h2>{{ _("Project team") }}</h2></div>
+      <p class="card-sub">{{ settings.TEAM_NAME }}</p>
+      <div class="meta-line">
+        <span><strong>{{ _("School:") }}</strong> <span class="muted">{{ settings.SCHOOL_NAME }} · {{ settings.SCHOOL_PLACE }}</span></span>
+        <span><strong>{{ _("Competition:") }}</strong> <span class="muted">{{ settings.COMPETITION }}</span></span>
+      </div>
+      <div class="team-grid">
+        {% for name in settings.TEAM_MEMBERS %}
+          <div class="member"><span class="avatar">{{ initials(name) }}</span>
+            <div><strong>{{ name }}</strong><div class="muted small">{{ _("Team member") }}</div></div></div>
+        {% endfor %}
+      </div>
+
+      {% if can('manage_users') %}
+      <hr class="divider">
+      <h3 class="sub-title">{{ _("Accounts & roles") }}</h3>
+      <p class="muted field">{{ _("Choose what each person is allowed to do.") }}</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>{{ _("Name") }}</th><th>{{ _("Username") }}</th><th>{{ _("Email") }}</th><th>{{ _("Shelter") }}</th><th class="num">{{ _("Role") }}</th></tr></thead>
+          <tbody>
+          {% for u in users %}
+            <tr>
+              <td><strong>{{ u.display_name }}</strong>{% if u.id == current_user.id %}<span class="you">{{ _("you") }}</span>{% endif %}</td>
+              <td>{{ u.username }}</td>
+              <td>{{ u.email or "—" }}</td>
+              <td>{{ u.shelter_name or "—" }}</td>
+              <td>
+                <div class="role-form">
+                  <form method="post" action="{{ url_for('change_role', user_id=u.id) }}" class="role-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <select name="role" aria-label="{{ _('Role') }}: {{ u.display_name }}">
+                      {% for r in settings.ROLES %}<option value="{{ r }}" {{ 'selected' if r == u.role }}>{{ _(r) }}</option>{% endfor %}
+                    </select>
+                    <button class="btn btn-ghost btn-small" type="submit">{{ _("Save") }}</button>
+                  </form>
+                  {% if u.id != current_user.id %}
+                  <form method="post" action="{{ url_for('admin_reset_password', user_id=u.id) }}" data-confirm="{{ _('Give this person a new temporary password?') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button class="btn btn-ghost btn-small" type="submit">{{ _("Reset password") }}</button>
+                  </form>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </section>
+  </div>
+</main>
+{% include "_footer.html" %}
+{% endblock %}
+{% block scripts %}<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% from "_macros.html" import flashes with context %}
+{% block title %}{{ _("SOS") }}{% endblock %}
+{% block content %}
+<h1>{{ _("SOS emergency") }}</h1>
+<p>{{ _("If someone is in danger right now, call the emergency services first:") }}</p>
+<div class="numbers">
+  {% for number, label in settings.EMERGENCY_NUMBERS %}
+    <a class="number" href="tel:{{ number }}"><strong>{{ number }}</strong>{{ _(label) }}</a>
+  {% endfor %}
+</div>
+<p class="muted small">{{ _("TRF Emergency Relief is an educational competition project, not a real emergency service.") }}</p>
+
+{{ flashes() }}
+
+{% if not current_user %}
+  <div class="card">
+    <h2 class="sub-title">{{ _("Send an SOS to the relief team") }}</h2>
+    <p class="field">{{ _("Shelter staff can send an SOS after logging in. It is marked Critical and alerts the response team straight away.") }}</p>
+    <a class="btn" href="{{ url_for('login', next=url_for('sos')) }}">{{ _("Log in to send an SOS") }}</a>
+  </div>
+{% elif view_only %}
+  <div class="card"><p>{{ _("Volunteers can't send SOS requests. Ask a coordinator or shelter staff member.") }}</p></div>
+{% else %}
+  <form method="post" class="card">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <h2 class="sub-title">{{ _("Send an SOS to the relief team") }}</h2>
+    <p class="muted field">{{ _("SOS requests are always Critical and alert the response team immediately.") }}</p>
+    <div class="form-grid two-col">
+      <div class="field"><label for="shelter_id">{{ _("Shelter") }}</label>
+        <select id="shelter_id" name="shelter_id" required>
+          {% for s in shelters %}<option value="{{ s.id }}" {{ 'selected' if current_user.shelter_id == s.id }}>{{ s.name }}</option>{% endfor %}
+        </select></div>
+      <div class="field"><label for="supply_type_id">{{ _("Supply needed") }}</label>
+        <select id="supply_type_id" name="supply_type_id" required>
+          {% for t in supplies %}<option value="{{ t.id }}">{{ t.label }}</option>{% endfor %}
+        </select></div>
+    </div>
+    <div class="field mt"><label for="quantity">{{ _("Quantity") }}</label>
+      <input id="quantity" name="quantity" type="number" min="1" max="{{ settings.MAX_REQUEST_QUANTITY }}" step="1" required></div>
+    <div class="field"><label for="note">{{ _("What happened? (optional)") }}</label>
+      <textarea id="note" name="note" maxlength="{{ settings.MAX_NOTE_LENGTH }}"></textarea></div>
+    <button class="btn btn-sos btn-block" type="submit" {{ 'disabled' if not shelters or not supplies }}>{{ _("Send SOS") }}</button>
+  </form>
+{% endif %}
+{% endblock %}

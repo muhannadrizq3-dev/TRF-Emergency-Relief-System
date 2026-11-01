@@ -1,0 +1,49 @@
+{% from "_macros.html" import icon, lang_button, theme_button with context %}<!doctype html>
+<html lang="{{ lang }}" dir="{{ text_dir }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ _("Overview") }}{% endblock %} · {{ settings.APP_NAME }}</title>
+  <meta name="description" content="{{ _('Track emergency supplies, handle shelter requests by urgency, and dispatch relief where it is needed most.') }}">
+  <meta name="theme-color" content="#c8102e">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.png') }}" type="image/png">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+  <script src="{{ url_for('static', filename='theme.js') }}"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
+  {% block head %}{% endblock %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  {% block body %}
+  <header class="simple-top">
+    <a class="brandline" href="{{ url_for('index') }}">
+      <img src="{{ url_for('static', filename='logo.png') }}" alt="" width="48" height="48"><span>{{ settings.APP_NAME }}</span>
+    </a>
+    <div class="tools">
+      {{ lang_button(request.path) }}
+      {{ theme_button() }}
+      {% if current_user %}<a class="btn btn-ghost pill-btn" href="{{ url_for('dashboard') }}">{{ _("Overview") }}</a>{% endif %}
+    </div>
+  </header>
+  <main class="simple">
+    {% block content %}{% endblock %}
+  </main>
+  {% include "_footer.html" %}
+  {% endblock %}
+
+  <div class="cookie-banner" id="cookie-banner" role="dialog" aria-labelledby="cookie-title" hidden>
+    <p id="cookie-title"><strong>{{ _("Cookies on this site") }}</strong></p>
+    <p>{{ _("We use one essential cookie to keep you logged in. With your OK we also remember your theme on this device. No tracking or advertising.") }}
+      <a href="{{ url_for('cookies') }}">{{ _("Cookie Policy") }}</a></p>
+    <div class="actions">
+      <button class="btn btn-ghost btn-small" type="button" data-cookie-choice="essential">{{ _("Essential only") }}</button>
+      <button class="btn btn-small" type="button" data-cookie-choice="all">{{ _("Accept") }}</button>
+    </div>
+  </div>
+
+  {% block scripts %}{% endblock %}
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

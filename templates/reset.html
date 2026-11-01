@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, flashes with context %}
+{% block title %}{{ _("Choose a new password") }}{% endblock %}
+{% block content %}
+<h1>{{ _("Choose a new password") }}</h1>
+{{ flashes() }}
+<form method="post" class="card">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="field">
+    <label for="password">{{ _("New password") }}</label>
+    <div class="input-icon">{{ icon("lock") }}
+      <input id="password" name="password" type="password" required minlength="8" maxlength="128" autocomplete="new-password">
+      <button class="reveal" type="button" data-reveal="password" aria-label="{{ _('Show password') }}">{{ icon("eye") }}</button>
+    </div>
+    <p class="hint">{{ _("At least 8 characters with a letter and a number. Add symbols to make it stronger.") }}</p>
+  </div>
+  <div class="field">
+    <label for="confirm">{{ _("Confirm password") }}</label>
+    <div class="input-icon">{{ icon("lock") }}
+      <input id="confirm" name="confirm" type="password" required minlength="8" maxlength="128" autocomplete="new-password">
+      <button class="reveal" type="button" data-reveal="confirm" aria-label="{{ _('Show password') }}">{{ icon("eye") }}</button>
+    </div>
+  </div>
+  <button class="btn btn-gradient btn-block" type="submit">{{ _("Save new password") }}</button>
+</form>
+{% endblock %}

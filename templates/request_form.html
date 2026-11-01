@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% from "_macros.html" import flashes with context %}
+{% block title %}{{ _("Edit request") }}{% endblock %}
+{% block content %}
+<h1>{{ _("Edit request") }}</h1>
+<p class="muted">{{ shelter.name }} · {{ supply.name|title }} ({{ supply.unit }}){% if existing.is_sos %} · SOS{% endif %}</p>
+{{ flashes() }}
+<form method="post" class="card">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="form-grid two-col">
+    <div class="field"><label for="quantity">{{ _("Quantity") }}</label>
+      <input id="quantity" name="quantity" type="number" min="{{ [existing.delivered, 1]|max }}" max="{{ settings.MAX_REQUEST_QUANTITY }}" step="1" required value="{{ existing.quantity }}">
+      {% if existing.delivered %}<p class="hint">{{ _("Already delivered:") }} {{ existing.delivered }}</p>{% endif %}</div>
+    <div class="field"><label for="priority">{{ _("Priority") }}</label>
+      <select id="priority" name="priority" {{ 'disabled' if existing.is_sos }}>
+        {% for level in [4, 3, 2, 1] %}<option value="{{ priorities[level] }}" {{ 'selected' if existing.priority == level }}>{{ _(priorities[level]|capitalize) }}</option>{% endfor %}
+      </select>
+      {% if existing.is_sos %}<p class="hint">{{ _("SOS requests always stay Critical.") }}</p>{% endif %}</div>
+  </div>
+  <div class="field mt"><label for="note">{{ _("Note (optional)") }}</label>
+    <textarea id="note" name="note" maxlength="{{ settings.MAX_NOTE_LENGTH }}">{{ existing.note }}</textarea></div>
+  <div class="toolbar">
+    <button class="btn" type="submit">{{ _("Save changes") }}</button>
+    <a class="btn btn-ghost" href="{{ url_for('dashboard') }}#requests">{{ _("Back") }}</a>
+  </div>
+</form>
+{% endblock %}

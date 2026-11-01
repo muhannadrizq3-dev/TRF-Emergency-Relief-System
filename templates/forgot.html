@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, flashes with context %}
+{% block title %}{{ _("Forgot password?") }}{% endblock %}
+{% block content %}
+<h1>{{ _("Forgot your password?") }}</h1>
+{{ flashes() }}
+{% if email_enabled %}
+<form method="post" class="card">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <p class="field">{{ _("Enter the email address on your account and we'll send you a link to choose a new password.") }}</p>
+  <div class="field">
+    <label for="email">{{ _("Email address") }}</label>
+    <div class="input-icon">{{ icon("mail") }}
+      <input id="email" name="email" type="email" required maxlength="254" autocomplete="email" placeholder="you@example.com">
+    </div>
+  </div>
+  <div class="toolbar">
+    <button class="btn" type="submit">{{ _("Send reset link") }}</button>
+    <a class="btn btn-ghost" href="{{ url_for('login') }}">{{ _("Back to log in") }}</a>
+  </div>
+</form>
+<p class="muted small mt">{{ _("No email on your account? Ask your Coordinator to reset your password from Team → Accounts & roles.") }}</p>
+{% else %}
+<div class="card">
+  <p class="field">{{ _("Email reset isn't switched on yet, so your Coordinator resets passwords.") }}</p>
+  <ol>
+    <li>{{ _("Ask your Coordinator to open Team → Accounts & roles and press Reset password next to your name.") }}</li>
+    <li>{{ _("They will give you a temporary password in person.") }}</li>
+    <li>{{ _("Log in with it and keep it private.") }}</li>
+  </ol>
+  <p class="muted field">{{ _("If you are the Coordinator and you are locked out, wait 15 minutes after five wrong tries, or ask the team member who manages the database.") }}</p>
+  <a class="btn" href="{{ url_for('login') }}">{{ _("Back to log in") }}</a>
+</div>
+{% endif %}
+{% endblock %}
