@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Cookie Policy") }}{% endblock %}
+{% block content %}
+{% if lang == 'ar' %}
+<h1>سياسة ملفات تعريف الارتباط</h1>
+<h2>ملف أساسي واحد</h2>
+<p>نستخدم ملف تعريف ارتباط واحدًا اسمه <code>session</code> لإبقائك مسجلاً للدخول وحماية النماذج. يُحذف عند إغلاق المتصفح، أو بعد 30 يومًا إذا اخترت "تذكرني".</p>
+<h2>تفضيلات على جهازك</h2>
+<p>إذا وافقت، نحفظ اختيارك للوضع الفاتح أو الداكن في متصفحك. لا يُرسل هذا إلى خوادمنا.</p>
+<h2>لا تتبع</h2>
+<p>لا نستخدم ملفات تتبع أو إعلانات أو تحليلات. تُحمَّل صور الخريطة من Esri والخطوط من Google Fonts.</p>
+<h2>البيانات التي نخزنها</h2>
+<p>اسمك، واسم المستخدم، والبريد الإلكتروني (اختياري)، وكلمة المرور بعد تشفيرها، والدور، والطلبات، وسجل النشاط.</p>
+{% else %}
+<h1>Cookie Policy</h1>
+<h2>One essential cookie</h2>
+<p>We use one cookie, <code>session</code>, to keep you logged in and to protect forms against forgery. It ends when you close the browser, or after 30 days if you tick "Remember me".</p>
+<h2>Preferences on your device</h2>
+<p>If you accept, we save your light or dark theme choice in your browser's storage. It is never sent to our server. Choose "Essential only" and it is not saved.</p>
+<h2>No tracking</h2>
+<p>There are no tracking, advertising or analytics cookies. Map images load from Esri and fonts load from Google Fonts, so those services see your IP address.</p>
+<h2>What we store about you</h2>
+<p>Your name, username, email (optional), a hashed password (never the password itself), your role, the requests you make and the activity history. Alerts for critical requests include the shelter, its location, the sender's name and the time.</p>
+{% endif %}
+<p><button class="btn btn-ghost" type="button" data-cookie-settings>{{ _("Cookie settings") }}</button></p>
+{% endblock %}

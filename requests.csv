@@ -1,0 +1,4 @@
+shelter,item,quantity,priority
+Shelter A,water,40,high
+Shelter B,food,60,high
+Shelter C,first aid kits,10,medium

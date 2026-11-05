@@ -1,0 +1,8 @@
+<footer class="site-foot">
+  <p>{{ settings.APP_NAME }} · {{ settings.SCHOOL_NAME }} · {{ settings.COMPETITION }}</p>
+  <p class="legal-links">
+    <a href="{{ url_for('terms') }}">{{ _("Terms & Conditions") }}</a> ·
+    <a href="{{ url_for('cookies') }}">{{ _("Cookie Policy") }}</a> ·
+    <button type="button" data-cookie-settings>{{ _("Cookie settings") }}</button>
+  </p>
+</footer>

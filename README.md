@@ -25,56 +25,54 @@ organises who gets what:
   Activity history (UAE time) and Team.
 - Arabic / English (right-to-left layout), light / dark mode, works on phones, cookie settings.
 
+## RIT Phase 2 — Medical dispatch
+
+The dashboard includes a **Medical dispatch – RIT Phase 2** section. Create a request by selecting a shelter
+and specialty. The system filters for doctors whose status is `Available`, calculates the Euclidean distance
+`sqrt((x2-x1)^2+(y2-y1)^2)`, and assigns the nearest eligible doctor. The assigned doctor is changed to
+`Dispatched/Busy`. If no eligible doctor is available, the request is marked
+`Pending Medical Dispatch - High Urgency`. The dashboard shows the request, doctor ID, specialty, hospital,
+distance and status. Medical dispatch records are available as CSV and JSON exports.
+
+**Demo-data notice:** the three hospitals and four doctors are fictional sample records added only to
+demonstrate the workflow because no official hospital/doctor dataset was supplied. The displayed distance
+is Euclidean coordinate distance using longitude as x and latitude as y; it is not a road distance or ETA.
+The physical-supply dispatch system remains separate and unchanged.
+
 ## 2. Roles
 
 | Role | Can do |
 |---|---|
-| **Coordinator** (the four team accounts) | Everything: stock, supply types, requests, shelters, dispatch, roles, password resets, CSV import, demo reset |
+| **Coordinator** (the first account created) | Everything: stock, supply types, requests, shelters, dispatch, roles, password resets, CSV import, demo reset |
 | **Shelter staff** | Create requests and SOS; edit / cancel **their own** open requests |
 | **Volunteer** | View only |
 
-### Team accounts
-
-Four Coordinator accounts are built in and created automatically every time the app starts, so they are always
-there — even after Vercel restarts the app:
-
-| Name | Username | Email (also works for log in) |
-|---|---|---|
-| Muhannad Rizq | `muhannad` | muhannadrizq3@gmail.com |
-| Toka Ahmed | `toka` | toka82439@gmail.com |
-| Reima Aboamir | `reima` | abomir.reima@gmail.com |
-| Fatyma Iskhakova | `fatyma` | fatyma.isk@gmail.com |
-
-The passwords are shared privately inside the team. Only their scrypt hashes are in `settings.py`, so the
-passwords themselves are never in the code or on GitHub. Everyone else who signs up chooses Volunteer or
-Shelter staff; nobody can sign up as Coordinator — the server ignores it.
-
-People log in with their **username or email**.
-
-**Forgot password?** When the email settings (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD`) are set, people enter
-their email and get a reset link that works once and expires after 30 minutes. Without email settings, the
-Coordinator presses **Reset password** in Team → Accounts & roles and gives the person a temporary password.
+People log in with their **username or email**. Nobody can sign up as Coordinator — the server ignores it.
+Forgot password? The Coordinator presses **Reset password** in Team → Accounts & roles and gives the person a
+temporary password.
 
 ## 3. Project structure
 
 ```
 trf-emergency-relief/
-├── app.py                  # Entry point Vercel starts (imports the Flask app)
+├── api/index.py            # Vercel entry point (imports the Flask app)
 ├── web_app.py              # Website: routes, login, permissions, CSRF, security headers, dashboard numbers
 ├── settings.py             # Roles, permissions, priorities, limits, demo data, environment settings
 ├── inventory.py            # Stock, low-stock levels, supply types, supplies CSV import
 ├── emergency_requests.py   # Requests + shelters, validation, 24h priority raising
-├── dispatch.py             # fair_shares (largest remainder) + dispatch planning
+├── dispatch.py             # fair_shares (largest remainder) + supply dispatch
+├── medical_dispatch.py     # nearest eligible hospital/doctor assignment (RIT Phase 2)
 ├── notifier.py             # Telegram / WhatsApp / email alerts with fallback log
 ├── activity.py             # Activity history (who did what, UAE time)
 ├── data_io.py              # CSV import (shelters, requests) and all CSV exports
-├── storage.py              # Saves everything in a built-in SQLite file (no database server needed)
+├── storage.py              # SQLite/PostgreSQL + medical dispatch tables
 ├── translations.py         # English → Arabic interface text
 ├── templates/              # HTML pages (Jinja2)
 ├── static/                 # CSS, JavaScript, TRF logo and icons
-├── tests/                  # 174 automated unit tests
+├── tests/                  # automated unit tests (including medical dispatch)
 ├── samples/                # Example CSV files for the three imports
 ├── requirements.txt
+├── vercel.json
 └── .env.example
 ```
 
@@ -93,7 +91,7 @@ pip install -r requirements.txt
 python web_app.py
 ```
 
-Open http://127.0.0.1:5000 and log in with one of the four team accounts. Data is saved
+Open http://127.0.0.1:5000, click **Create account** — the first account becomes the Coordinator. Data is saved
 in `instance/trf_relief.db` (SQLite). Run the tests with:
 
 ```bash
@@ -115,24 +113,19 @@ git push -u origin main
 ```
 
 (Or on github.com use **Add file → Upload files** and drag in everything inside this folder — keep the
-`templates`, `static`, `tests` and `samples` folders as folders.)
+`api`, `templates`, `static`, `tests` and `samples` folders as folders.)
 
 ## 6. Deploy on Vercel
 
-There is **no database to set up**. The app keeps its data in a built-in SQLite file and creates it by itself.
-
-1. **vercel.com → Add New → Project** → import the repository. Vercel detects **Flask** by itself (leave the preset as it suggests). Deploy.
-2. **Settings → Environment Variables**: add `SECRET_KEY` (a long random string —
+1. **vercel.com → Add New → Project** → import the repository. Framework preset: **Other**. Deploy.
+2. **Add a database (important).** Vercel's servers forget files, so use Neon: in the project open
+   **Storage → Create Database → Neon (Postgres)** and connect it. This adds `DATABASE_URL` automatically.
+3. **Settings → Environment Variables**: add `SECRET_KEY` (a long random string —
    `python -c "import secrets; print(secrets.token_hex(32))"`), plus any alert settings from section 7.
-   Without `SECRET_KEY`, people get logged out every time Vercel restarts the app.
-3. **Redeploy** (Deployments → ⋯ → Redeploy) so the variables are used.
-4. Open the site and log in with one of the four team accounts. The demo data (Water 100, Food 80,
-   First Aid Kits 30, Shelters A–C) is created automatically.
-
-**Good to know:** on Vercel the data file is temporary. When nobody has used the site for a while (usually
-10–15 minutes) Vercel restarts the app and everything starts again from the demo data — accounts included.
-The four team accounts always come back, so you can log in straight away after a restart. On your own computer (`python web_app.py`) the data is kept in
-`instance/trf_relief.db` and never resets.
+4. **Redeploy** (Deployments → ⋯ → Redeploy) so the variables are used.
+5. Open the site and create the first account (the Coordinator). Tables and demo data (Water 100, Food 80,
+   First Aid Kits 30, Shelters A–C) are created automatically. `https://your-site.vercel.app/healthz` should
+   say `"database": "PostgreSQL"`.
 
 ## 7. Alerts (optional — switch on any of them)
 
@@ -143,7 +136,7 @@ Each channel turns on when its variables are set. The Coordinator sees which one
 |---|---|---|
 | Telegram | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | Talk to **@BotFather** → `/newbot`. Message the bot, then open `https://api.telegram.org/bot<TOKEN>/getUpdates` and copy `chat.id`. |
 | WhatsApp | `WHATSAPP_PHONE`, `WHATSAPP_APIKEY` | Free **CallMeBot** service for one test phone: follow the steps on callmebot.com (send their activation message from the phone) to get an API key. Phone in `+9715…` form. |
-| Email | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `ALERT_EMAIL_TO` | Gmail: `smtp.gmail.com`, port `587`, your Gmail address and a Google **App Password** (needs 2-step verification). The first four also switch on password-reset emails. |
+| Email | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `ALERT_EMAIL_TO` | Gmail: `smtp.gmail.com`, port `587`, your Gmail address and a Google **App Password** (needs 2-step verification). |
 
 ## 8. CSV import & export (Data section)
 
@@ -188,7 +181,7 @@ Example: 50 food, two high requests for 60 and 40 → **30 and 20**. 7 kits, thr
 
 ## 11. Tests
 
-`python -m unittest` runs **174 tests**:
+`python -m unittest` runs **159 tests**:
 
 | File | Covers |
 |---|---|
@@ -197,18 +190,18 @@ Example: 50 food, two high requests for 60 and 40 → **30 and 20**. 7 kits, thr
 | `test_inventory.py` | quantity validation, stock levels and bars, stock changes, supply types, supplies CSV |
 | `test_data_activity.py` | shelter/request CSV import, exports, activity history and UAE time, overview numbers |
 | `test_notifier.py` | alert text, Telegram/WhatsApp/email, partial failures, fallback log |
-| `test_storage_settings.py` | SQLite storage, saving to a file, seeding, reset / start empty, SQL-injection safety, permissions |
-| `test_web.py` | sign-up form, username/email login, remember me, lockout, coordinator reset, email reset links, CSRF, headers, role access, XSS, every section |
+| `test_storage_settings.py` | SQLite/PostgreSQL wrapper, seeding, reset / start empty, SQL-injection safety, permissions |
+| `test_web.py` | sign-up, username/email login, remember me, lockout, password reset, CSRF, headers, role access, XSS, every section |
 
 ## 12. Presentation split
 
 - **Person 1 — Dispatch & logic:** priority order, 24h escalation, fair-share formula (`dispatch.py`, `emergency_requests.py`).
-- **Person 2 — Inventory & storage:** stock levels, SQLite storage, CSV import/export (`inventory.py`, `storage.py`, `data_io.py`).
+- **Person 2 — Inventory & storage:** stock levels, SQLite/PostgreSQL wrapper, CSV import/export (`inventory.py`, `storage.py`, `data_io.py`).
 - **Person 3 — Security & roles:** access control, hashing, CSRF, lockout, headers, activity history (`settings.py`, `web_app.py`, `activity.py`).
 - **Person 4 — UI, maps & alerts:** Arabic + RTL, dark mode, responsive design, Leaflet map, Telegram/WhatsApp/email (`templates/`, `static/`, `notifier.py`).
 
 ### Demo script (5 minutes)
-1. Log in as `muhannad`. Show the overview cards and Inventory (First Aid Kits shows *Getting low*).
+1. Log in as the Coordinator. Show the overview cards and Inventory (First Aid Kits shows *Getting low*).
 2. In a private window, create a Shelter staff account for Shelter B; request 60 food (high). Press **SOS** for 40 first aid kits.
 3. Back as Coordinator: the SOS pill appears, the alert arrives on the team phone, Shelter A turns red on the map, Reports shows a shortage.
 4. Set food to 50 (Inventory → Edit stock), request 40 more food (high) for Shelter C, press **Dispatch all fairly** → 30 / 20.

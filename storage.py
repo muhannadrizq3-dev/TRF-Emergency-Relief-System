@@ -1,14 +1,15 @@
 import os
 import sqlite3
-import tempfile
+import ssl
 import threading
 from datetime import datetime, timezone
+from urllib.parse import urlparse, unquote, parse_qs
 
 import settings
 
 SCHEMA = [
     """CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id {pk},
         username TEXT UNIQUE NOT NULL,
         email TEXT,
         display_name TEXT NOT NULL,
@@ -20,22 +21,22 @@ SCHEMA = [
         created_at TEXT NOT NULL
     )""",
     """CREATE TABLE IF NOT EXISTS shelters (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id {pk},
         name TEXT UNIQUE NOT NULL,
         area TEXT NOT NULL DEFAULT '',
-        latitude REAL NOT NULL,
-        longitude REAL NOT NULL,
+        latitude DOUBLE PRECISION NOT NULL,
+        longitude DOUBLE PRECISION NOT NULL,
         capacity INTEGER NOT NULL DEFAULT 0
     )""",
     """CREATE TABLE IF NOT EXISTS supply_types (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id {pk},
         name TEXT UNIQUE NOT NULL,
         unit TEXT NOT NULL DEFAULT 'units',
         quantity INTEGER NOT NULL DEFAULT 0,
         threshold INTEGER NOT NULL DEFAULT 0
     )""",
     """CREATE TABLE IF NOT EXISTS requests (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id {pk},
         shelter_id INTEGER NOT NULL,
         supply_type_id INTEGER NOT NULL,
         quantity INTEGER NOT NULL,
@@ -49,14 +50,14 @@ SCHEMA = [
         updated_at TEXT NOT NULL
     )""",
     """CREATE TABLE IF NOT EXISTS dispatches (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id {pk},
         request_id INTEGER NOT NULL,
         quantity INTEGER NOT NULL,
         dispatched_by INTEGER NOT NULL,
         created_at TEXT NOT NULL
     )""",
     """CREATE TABLE IF NOT EXISTS activity (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id {pk},
         user_id INTEGER,
         user_name TEXT NOT NULL,
         action TEXT NOT NULL,
@@ -66,8 +67,40 @@ SCHEMA = [
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
     )""",
+    """CREATE TABLE IF NOT EXISTS hospitals (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        latitude DOUBLE PRECISION NOT NULL,
+        longitude DOUBLE PRECISION NOT NULL
+    )""",
+    """CREATE TABLE IF NOT EXISTS doctors (
+        id TEXT PRIMARY KEY,
+        hospital_id TEXT NOT NULL,
+        specialty TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'Available'
+    )""",
+    """CREATE TABLE IF NOT EXISTS medical_requests (
+        id {pk},
+        shelter_id INTEGER NOT NULL,
+        required_specialty TEXT NOT NULL,
+        urgency TEXT NOT NULL DEFAULT 'High',
+        status TEXT NOT NULL DEFAULT 'Pending Medical Dispatch - High Urgency',
+        assigned_doctor_id TEXT,
+        hospital_id TEXT,
+        distance DOUBLE PRECISION,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )""",
+    """CREATE TABLE IF NOT EXISTS medical_dispatches (
+        id {pk},
+        medical_request_id INTEGER NOT NULL,
+        doctor_id TEXT NOT NULL,
+        hospital_id TEXT NOT NULL,
+        distance DOUBLE PRECISION NOT NULL,
+        dispatched_at TEXT NOT NULL
+    )""",
     """CREATE TABLE IF NOT EXISTS alerts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        id {pk},
         message TEXT NOT NULL,
         channel TEXT NOT NULL,
         delivered INTEGER NOT NULL DEFAULT 0,
@@ -75,7 +108,8 @@ SCHEMA = [
     )""",
 ]
 
-TABLES = ["users", "shelters", "supply_types", "requests", "dispatches", "alerts", "activity", "meta"]
+TABLES = ["users", "shelters", "supply_types", "requests", "dispatches", "alerts", "activity", "meta",
+          "hospitals", "doctors", "medical_requests", "medical_dispatches"]
 
 
 def utcnow():
@@ -94,39 +128,76 @@ def from_iso(text):
 
 def default_sqlite_path():
     if settings.ON_VERCEL:
-        return os.path.join(tempfile.gettempdir(), "trf_relief.db")
+        return "/tmp/trf_relief.db"
     here = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(here, "instance", "trf_relief.db")
 
 
-def open_sqlite(path):
-    if path == ":memory:":
-        return sqlite3.connect(path, check_same_thread=False)
-    candidates = [path, os.path.join(tempfile.gettempdir(), "trf_relief.db")]
-    for candidate in candidates:
-        try:
-            os.makedirs(os.path.dirname(candidate), exist_ok=True)
-            conn = sqlite3.connect(candidate, check_same_thread=False)
-            conn.execute("CREATE TABLE IF NOT EXISTS _write_check (x INTEGER)")
-            conn.commit()
-            return conn
-        except (OSError, sqlite3.Error):
-            continue
-    return sqlite3.connect(":memory:", check_same_thread=False)
-
-
 class Storage:
 
-    def __init__(self, sqlite_path=None):
+    def __init__(self, database_url=None, sqlite_path=None):
+        url = settings.DATABASE_URL if database_url is None else database_url
+        self.is_postgres = bool(url) and url.startswith(("postgres://", "postgresql://"))
         self._lock = threading.RLock()
-        self._conn = open_sqlite(sqlite_path or default_sqlite_path())
-        self._conn.row_factory = sqlite3.Row
+        if self.is_postgres:
+            self._url = url
+            self._conn = self._connect_postgres(url)
+        else:
+            path = sqlite_path or default_sqlite_path()
+            if path != ":memory:":
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+            self._conn = sqlite3.connect(path, check_same_thread=False)
+            self._conn.row_factory = sqlite3.Row
         self.create_schema()
 
+    @staticmethod
+    def _connect_postgres(url):
+        import pg8000.dbapi
+
+        parts = urlparse(url)
+        query = parse_qs(parts.query)
+        sslmode = (query.get("sslmode") or ["require"])[0]
+        ssl_context = None
+        if sslmode != "disable":
+            ssl_context = ssl.create_default_context()
+        conn = pg8000.dbapi.connect(
+            user=unquote(parts.username or ""),
+            password=unquote(parts.password or ""),
+            host=parts.hostname,
+            port=parts.port or 5432,
+            database=(parts.path or "/").lstrip("/") or "postgres",
+            ssl_context=ssl_context,
+            timeout=10,
+        )
+        conn.autocommit = True
+        return conn
+
+    def _reconnect(self):
+        if self.is_postgres:
+            try:
+                self._conn.close()
+            except Exception:
+                pass
+            self._conn = self._connect_postgres(self._url)
+
+    def _sql(self, sql):
+        return sql.replace("?", "%s") if self.is_postgres else sql
+
     def _run(self, sql, params=()):
-        cur = self._conn.cursor()
-        cur.execute(sql, tuple(params))
-        return cur
+        with self._lock:
+            try:
+                cur = self._conn.cursor()
+                cur.execute(self._sql(sql), tuple(params))
+                return cur
+            except Exception as exc:
+                if self.is_postgres and "network" in str(exc).lower():
+                    self._reconnect()
+                    cur = self._conn.cursor()
+                    cur.execute(self._sql(sql), tuple(params))
+                    return cur
+                if self.is_postgres:
+                    self._conn.rollback()
+                raise
 
     def _rows(self, cur):
         if cur.description is None:
@@ -150,13 +221,19 @@ class Storage:
 
     def insert(self, sql, params=()):
         with self._lock:
-            cur = self._run(sql, params)
+            if self.is_postgres:
+                cur = self._run(sql + " RETURNING id", params)
+                new_id = cur.fetchone()[0]
+            else:
+                cur = self._run(sql, params)
+                new_id = cur.lastrowid
             self._conn.commit()
-            return cur.lastrowid
+            return new_id
 
     def create_schema(self):
+        pk = "SERIAL PRIMARY KEY" if self.is_postgres else "INTEGER PRIMARY KEY AUTOINCREMENT"
         for statement in SCHEMA:
-            self.execute(statement)
+            self.execute(statement.format(pk=pk))
         try:
             self.query("SELECT email FROM users LIMIT 1")
         except Exception:
@@ -194,7 +271,7 @@ class Storage:
 
     @property
     def backend_name(self):
-        return "SQLite"
+        return "PostgreSQL" if self.is_postgres else "SQLite"
 
 
 def seed_demo_data(store, force=False):
@@ -215,25 +292,11 @@ def seed_demo_data(store, force=False):
             )
 
 
-def seed_team_accounts(store):
-    for username, name, email, password_hash in settings.TEAM_ACCOUNTS:
-        existing = store.query_one("SELECT id, email FROM users WHERE LOWER(username) = LOWER(?)", (username,))
-        if existing:
-            if not existing["email"] and email:
-                store.execute("UPDATE users SET email = ? WHERE id = ?", (email, existing["id"]))
-            continue
-        store.insert(
-            """INSERT INTO users (username, email, display_name, password_hash, role, shelter_id,
-                                  failed_attempts, locked_until, created_at)
-               VALUES (?, ?, ?, ?, ?, NULL, 0, NULL, ?)""",
-            (username, email, name, password_hash, settings.COORDINATOR, to_iso(utcnow())),
-        )
-
-
 def clear_data(store):
-    for table in ("dispatches", "requests", "alerts", "supply_types", "shelters"):
+    for table in ("medical_dispatches", "medical_requests", "dispatches", "requests", "alerts", "supply_types", "shelters"):
         store.clear(table)
     store.execute("UPDATE users SET shelter_id = NULL")
+    store.execute("UPDATE doctors SET status = 'Available'")
 
 
 def reset_demo(store):

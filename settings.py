@@ -5,17 +5,6 @@ TEAM_NAME = "TRF-Emergency-Relief"
 SCHOOL = "Al Maarifa International Private School, Sharjah"
 TEAM_MEMBERS = ["Muhannad Rizq", "Toka Ahmed", "Reima Aboamir", "Fatyma Iskhakova"]
 
-TEAM_ACCOUNTS = [
-    ("muhannad", "Muhannad Rizq", "muhannadrizq3@gmail.com",
-     "scrypt:32768:8:1$rkRBSpjPI1piJw2o$09c958725d4f75a06388c3f5de919a5d939026521246ff948f3811bfc8554de925f0a04874b7c1119646fb96c68df8d5905f65f378e0928043c458382bdd3184"),
-    ("toka", "Toka Ahmed", "toka82439@gmail.com",
-     "scrypt:32768:8:1$Ujx1T9o0h3eBIZC1$c58e4f49b26d4902e1af52dff0931b264aeb7456bdb67d34af5023fdac9437999c75520ecedf4dc58890e62b99a821c8bcc8053086be9c0176cfba3ed762deb7"),
-    ("reima", "Reima Aboamir", "abomir.reima@gmail.com",
-     "scrypt:32768:8:1$mwE03bqvkWgZV3bp$9e814fa15039e873fc50593ecfd6d6c3e26b702b9358863caf1786fcc4fdb16cc16313bd13e79dd44fb1b8c25b3607853af7bdfb9627df848ac30d58e020e7f3"),
-    ("fatyma", "Fatyma Iskhakova", "fatyma.isk@gmail.com",
-     "scrypt:32768:8:1$5Tr3dAnFvFfPF48n$9aeaf4943dbc0e33d786de496f74e5c9320f9229b991ec1053f90a3279419f460bf9cc511360a52a6e351367fb72c054678544ac50700153f390ffd642120f72"),
-]
-
 COORDINATOR = "coordinator"
 SHELTER_STAFF = "shelter_staff"
 VOLUNTEER = "volunteer"
@@ -95,6 +84,7 @@ EMERGENCY_NUMBERS = [
     ("997", "Civil Defence"),
 ]
 
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
 WHATSAPP_PHONE = os.environ.get("WHATSAPP_PHONE", "").strip()
@@ -104,4 +94,4 @@ SMTP_PORT = int(os.environ.get("SMTP_PORT", "587") or 587)
 SMTP_USER = os.environ.get("SMTP_USER", "").strip()
 SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "").strip()
 ALERT_EMAIL_TO = os.environ.get("ALERT_EMAIL_TO", "").strip()
-ON_VERCEL = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+ON_VERCEL = bool(os.environ.get("VERCEL"))

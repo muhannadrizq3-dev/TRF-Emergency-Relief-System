@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Forgot password?") }}{% endblock %}
+{% block content %}
+<h1>{{ _("Forgot your password?") }}</h1>
+<div class="card">
+  <p class="field">{{ _("For safety, passwords are reset by your Coordinator, not by email.") }}</p>
+  <ol>
+    <li>{{ _("Ask your Coordinator to open Team → Accounts & roles and press Reset password next to your name.") }}</li>
+    <li>{{ _("They will give you a temporary password in person.") }}</li>
+    <li>{{ _("Log in with it and keep it private.") }}</li>
+  </ol>
+  <p class="muted field">{{ _("If you are the Coordinator and you are locked out, wait 15 minutes after five wrong tries, or ask the team member who manages the database.") }}</p>
+  <a class="btn" href="{{ url_for('login') }}">{{ _("Back to log in") }}</a>
+</div>
+{% endblock %}

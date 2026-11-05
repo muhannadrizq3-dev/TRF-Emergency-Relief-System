@@ -1,0 +1,57 @@
+{% macro icon(name, cls="icon") -%}
+<svg class="{{ cls }}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+{%- if name == "box" -%}<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/>
+{%- elif name == "alert" -%}<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>
+{%- elif name == "truck" -%}<path d="M1 4h14v12H1zM15 9h4l3 3v4h-7z"/><circle cx="5.5" cy="18.5" r="2"/><circle cx="18.5" cy="18.5" r="2"/>
+{%- elif name == "chart" -%}<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>
+{%- elif name == "pin" -%}<path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/>
+{%- elif name == "clock" -%}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+{%- elif name == "users" -%}<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.2a5 5 0 0 1 5.5 5"/>
+{%- elif name == "download" -%}<path d="M12 3v12M7 10l5 5 5-5M4 21h16"/>
+{%- elif name == "plus" -%}<path d="M12 5v14M5 12h14"/>
+{%- elif name == "globe" -%}<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>
+{%- elif name == "contrast" -%}<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/>
+{%- elif name == "user" -%}<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>
+{%- elif name == "lock" -%}<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+{%- elif name == "eye" -%}<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/>
+{%- elif name == "check" -%}<path d="m4 12 5 5L20 6"/>
+{%- elif name == "shield" -%}<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+{%- elif name == "bell" -%}<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/>
+{%- elif name == "menu" -%}<path d="M3 6h18M3 12h18M3 18h18"/>
+{%- elif name == "upload" -%}<path d="M12 21V9M7 14l5-5 5 5M4 3h16"/>
+{%- endif -%}
+</svg>
+{%- endmacro %}
+
+{% macro priority_tag(label, escalated=False) -%}
+  <span class="tag tag-{{ label }}">{{ _(label) }}</span>{% if escalated %} <span class="up" title="{{ _('Raised because it has been waiting') }}">▲ {{ _("raised") }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro level_badge(level) -%}
+  <span class="badge badge-{{ level }}">{{ _({"good": "Good", "getting_low": "Getting low", "low": "Low"}[level]) }}</span>
+{%- endmacro %}
+
+{% macro lang_button(next_path) -%}
+  {% if lang == 'ar' %}
+    <a class="btn btn-ghost pill-btn" href="{{ url_for('set_language', code='en', next=next_path) }}" lang="en">{{ icon("globe") }}<span class="hide-sm">English</span></a>
+  {% else %}
+    <a class="btn btn-ghost pill-btn" href="{{ url_for('set_language', code='ar', next=next_path) }}" lang="ar">{{ icon("globe") }}<span class="hide-sm">العربية</span></a>
+  {% endif %}
+{%- endmacro %}
+
+{% macro theme_button() -%}
+  <button class="btn btn-ghost pill-btn" type="button" data-theme-toggle
+          data-light="{{ _('Light') }}" data-dark="{{ _('Dark') }}" aria-label="{{ _('Switch between light and dark mode') }}">
+    {{ icon("contrast") }}<span class="hide-sm" data-theme-label>{{ _("Light") }}</span>
+  </button>
+{%- endmacro %}
+
+{% macro flashes(extra_class="") -%}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    <ul class="flashes {{ extra_class }}" role="status">
+      {% for category, message in messages %}<li class="flash flash-{{ category }}">{{ message }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  {% endwith %}
+{%- endmacro %}

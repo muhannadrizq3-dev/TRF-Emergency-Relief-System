@@ -10,7 +10,6 @@ from functools import wraps
 
 from flask import (Flask, Response, abort, flash, g, jsonify, redirect, render_template,
                    request, session, url_for)
-from itsdangerous import BadSignature, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
 
 import activity
@@ -20,7 +19,7 @@ import emergency_requests as er
 import inventory
 import settings
 import storage
-from notifier import Notifier, send_mail_to, smtp_settings
+from notifier import Notifier
 from translations import translate
 
 logging.basicConfig(level=logging.INFO)
@@ -129,34 +128,6 @@ def set_role(store, acting_user, target_id, new_role):
     return target
 
 
-RESET_LINK_MINUTES = 30
-
-
-def make_reset_token(secret, user):
-    signer = URLSafeTimedSerializer(secret, salt="trf-password-reset")
-    return signer.dumps({"u": user["id"], "h": user["password_hash"][-16:]})
-
-
-def read_reset_token(store, secret, token):
-    signer = URLSafeTimedSerializer(secret, salt="trf-password-reset")
-    try:
-        data = signer.loads(token, max_age=RESET_LINK_MINUTES * 60)
-    except BadSignature:
-        return None
-    user = store.query_one("SELECT * FROM users WHERE id = ?", (data.get("u"),))
-    if user is None or user["password_hash"][-16:] != data.get("h"):
-        return None
-    return user
-
-
-def set_password(store, user_id, password):
-    validate_password(password)
-    store.execute(
-        "UPDATE users SET password_hash = ?, failed_attempts = 0, locked_until = NULL WHERE id = ?",
-        (generate_password_hash(password), user_id),
-    )
-
-
 def reset_password(store, target_id):
     target = store.query_one("SELECT * FROM users WHERE id = ?", (target_id,))
     if target is None:
@@ -222,20 +193,15 @@ def build_overview(store, user=None):
     }
 
 
-def stable_fallback_secret():
-    seeds = [os.environ.get(name, "") for name in
-             ("TELEGRAM_BOT_TOKEN", "VERCEL_PROJECT_ID", "VERCEL_GIT_REPO_ID", "VERCEL_PROJECT_PRODUCTION_URL")]
-    seeds.extend(password_hash for _, _, _, password_hash in settings.TEAM_ACCOUNTS)
-    return hashlib.sha256(("trf-session|" + "|".join(seeds)).encode()).hexdigest()
-
-
-def create_app(store=None, testing=False, notifier=None, mailer=None, team_accounts=None, app=None):
-    app = app or Flask(__name__)
-    secret = os.environ.get("SECRET_KEY", "").strip()
+def create_app(store=None, testing=False, notifier=None):
+    app = Flask(__name__)
+    secret = os.environ.get("SECRET_KEY")
     if not secret and testing:
         secret = "test-secret"
+    elif not secret and settings.DATABASE_URL:
+        secret = hashlib.sha256(("trf-session:" + settings.DATABASE_URL).encode()).hexdigest()
     elif not secret:
-        secret = stable_fallback_secret()
+        secret = secrets.token_hex(32)
     app.config.update(
         SECRET_KEY=secret,
         TESTING=testing,
@@ -250,13 +216,8 @@ def create_app(store=None, testing=False, notifier=None, mailer=None, team_accou
 
     store = store or storage.Storage()
     storage.seed_demo_data(store)
-    if team_accounts if team_accounts is not None else not testing:
-        storage.seed_team_accounts(store)
     app.store = store
     app.notifier = notifier or Notifier(store)
-    app.mailer = mailer
-    if app.mailer is None and smtp_settings():
-        app.mailer = lambda to, subject, body: send_mail_to(smtp_settings(), to, subject, body)
 
     @app.before_request
     def load_user():
@@ -271,12 +232,7 @@ def create_app(store=None, testing=False, notifier=None, mailer=None, team_accou
             sent = request.form.get("csrf_token", "")
             expected = session.get("csrf_token", "")
             if not expected or not hmac.compare_digest(sent, expected):
-                session["csrf_token"] = secrets.token_urlsafe(32)
-                flash(translate("Your session expired. Please try again.", g.lang), "info")
-                back_to = request.path if request.path in ("/login", "/signup", "/forgot-password") else None
-                if g.user and not back_to:
-                    back_to = url_for("dashboard")
-                return redirect(back_to or url_for("login"))
+                abort(400, description="Your form expired. Reload the page and try again.")
 
     @app.after_request
     def security_headers(resp):
@@ -413,7 +369,8 @@ def create_app(store=None, testing=False, notifier=None, mailer=None, team_accou
             else:
                 start_session(user, request.form.get("remember"))
                 return redirect(safe_next(request.args.get("next")))
-        return render_template("auth.html", tab="login", first_user=store.count("users") == 0, form={})
+        return render_template("auth.html", tab="login", first_user=store.count("users") == 0,
+                               shelters=er.list_shelters(store))
 
     @app.route("/signup", methods=["GET", "POST"])
     def signup():
@@ -438,46 +395,11 @@ def create_app(store=None, testing=False, notifier=None, mailer=None, team_accou
                     flash(t("Welcome! Your account is ready."), "success")
                     return redirect(url_for("dashboard"))
         return render_template("auth.html", tab="signup", first_user=store.count("users") == 0,
-                               form=request.form if request.method == "POST" else {})
+                               shelters=er.list_shelters(store))
 
-    @app.route("/forgot-password", methods=["GET", "POST"])
+    @app.route("/forgot-password")
     def forgot_password():
-        if request.method == "POST" and app.mailer:
-            email = (request.form.get("email") or "").strip().lower()
-            user = store.query_one("SELECT * FROM users WHERE email = ?", (email,)) if email else None
-            if user:
-                link = url_for("reset_with_link", token=make_reset_token(app.config["SECRET_KEY"], user), _external=True)
-                body = (f"Hello {user['display_name']},\n\n"
-                        f"Use this link to choose a new password for {settings.APP_NAME}. "
-                        f"It works once and expires in {RESET_LINK_MINUTES} minutes:\n\n{link}\n\n"
-                        "If you did not ask for this, you can ignore this email.")
-                try:
-                    app.mailer(email, f"{settings.APP_NAME}: reset your password", body)
-                except Exception as exc:
-                    app.logger.warning("Password reset email failed: %s", exc)
-            flash(t("If an account uses that email, a reset link is on its way. Check your inbox."), "success")
-            return redirect(url_for("forgot_password"))
-        return render_template("forgot.html", email_enabled=bool(app.mailer))
-
-    @app.route("/reset-password/<token>", methods=["GET", "POST"])
-    def reset_with_link(token):
-        user = read_reset_token(store, app.config["SECRET_KEY"], token)
-        if user is None:
-            flash(t("That reset link is invalid or has expired. Ask for a new one."), "error")
-            return redirect(url_for("forgot_password"))
-        if request.method == "POST":
-            if request.form.get("password") != request.form.get("confirm"):
-                flash(t("Passwords do not match."), "error")
-            else:
-                try:
-                    set_password(store, user["id"], request.form.get("password"))
-                except AuthError as exc:
-                    flash(str(exc), "error")
-                else:
-                    activity.log(store, user, "reset their password with an email link")
-                    flash(t("Your password has been changed. You can log in now."), "success")
-                    return redirect(url_for("login"))
-        return render_template("reset.html", token=token)
+        return render_template("forgot.html")
 
     @app.route("/logout", methods=["POST"])
     def logout():
@@ -506,6 +428,8 @@ def create_app(store=None, testing=False, notifier=None, mailer=None, team_accou
             channels=app.notifier.enabled_channels,
             priorities=settings.PRIORITY_NAMES,
             temp_password=session.pop("temp_password", None),
+            medical_requests=medical_dispatch.list_medical_requests(store),
+            medical_specialties=sorted({d["specialty"] for d in store.query("SELECT specialty FROM doctors")}),
         )
 
     def send_alert(req):
@@ -764,25 +688,6 @@ def create_app(store=None, testing=False, notifier=None, mailer=None, team_accou
             flash(t("Imported") + f" {summary}.", "success")
         return back("data")
 
-    @app.route("/alerts/test", methods=["POST"])
-    @permission_required("manage_users")
-    def test_alert():
-        notifier = app.notifier
-        if "telegram" not in notifier.channels:
-            missing = [name for name in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID") if not getattr(settings, name)]
-            flash(t("Telegram is not switched on.") + " " + t("Missing in Vercel:") + " " + ", ".join(missing or ["?"])
-                  + ". " + t("Add them in Settings → Environment Variables, then Redeploy."), "error")
-            return back("new-request")
-        text = (f"✅ Test alert from {settings.APP_NAME}\nSent by {g.user['display_name']}.\n"
-                "Demo alert from a school competition project. A real system would use official emergency channels.")
-        delivered = notifier.send(text)
-        if "telegram" in delivered:
-            log("sent a test Telegram alert")
-            flash(t("Test alert sent. Check the Telegram chat."), "success")
-        else:
-            flash(t("Telegram did not send the message:") + " " + notifier.last_errors.get("telegram", "unknown error"), "error")
-        return back("new-request")
-
     @app.route("/reset-demo", methods=["POST"])
     @permission_required("reset_demo")
     def reset_demo():
@@ -826,5 +731,7 @@ def create_app(store=None, testing=False, notifier=None, mailer=None, team_accou
     return app
 
 
+app = None if os.environ.get("TRF_NO_GLOBAL_APP") else create_app()
+
 if __name__ == "__main__":
-    create_app().run(debug=os.environ.get("FLASK_DEBUG") == "1", host="127.0.0.1", port=int(os.environ.get("PORT", 5000)))
+    app.run(debug=os.environ.get("FLASK_DEBUG") == "1", host="127.0.0.1", port=int(os.environ.get("PORT", 5000)))

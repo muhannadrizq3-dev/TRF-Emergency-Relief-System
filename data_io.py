@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 
 import activity
 import emergency_requests as er
@@ -9,7 +10,7 @@ from inventory import InventoryError, csv_safe, read_csv
 from storage import to_iso, utcnow
 
 IMPORT_KINDS = ("supplies", "shelters", "requests")
-EXPORT_KINDS = ("supplies", "requests", "shelters", "activity")
+EXPORT_KINDS = ("supplies", "requests", "shelters", "activity", "medical_dispatches")
 
 
 def import_shelters_csv(store, text):
@@ -95,8 +96,43 @@ def export_csv(store, kind):
     if kind == "activity":
         return _write(("time_uae", "user", "action"),
                       [(a["uae_time"], a["user_name"], a["action"]) for a in activity.recent(store, 10_000)])
+    if kind == "medical_dispatches":
+        rows = store.query(
+            """SELECT mr.id AS request_id, s.name AS shelter, mr.required_specialty,
+                      mr.urgency, mr.status, d.id AS doctor_id, d.specialty AS doctor_specialty,
+                      h.name AS hospital_name, mr.distance, mr.created_at
+               FROM medical_requests mr JOIN shelters s ON s.id = mr.shelter_id
+               LEFT JOIN doctors d ON d.id = mr.assigned_doctor_id
+               LEFT JOIN hospitals h ON h.id = mr.hospital_id ORDER BY mr.id DESC"""
+        )
+        return _write(("request_id", "shelter", "required_specialty", "urgency", "status",
+                       "doctor_id", "doctor_specialty", "hospital_name", "distance",
+                       "distance_unit", "created_at"),
+                      [(r["request_id"], r["shelter"], r["required_specialty"], r["urgency"],
+                        r["status"], r["doctor_id"] or "", r["doctor_specialty"] or "",
+                        r["hospital_name"] or "", r["distance"] if r["distance"] is not None else "",
+                        "coordinate units" if r["distance"] is not None else "", r["created_at"])
+                       for r in rows])
     raise InventoryError("Unknown export.")
 
 
 def export_filename(kind):
     return f"trf-{kind}-{to_iso(utcnow())[:10]}.csv"
+
+
+def export_json(store, kind):
+    if kind != "medical_dispatches":
+        raise InventoryError("JSON export is available for medical dispatch records.")
+    rows = store.query(
+        """SELECT mr.id AS request_id, s.name AS shelter, mr.required_specialty,
+                  mr.urgency, mr.status, d.id AS doctor_id, d.specialty AS doctor_specialty,
+                  h.name AS hospital_name, mr.distance, mr.created_at
+           FROM medical_requests mr JOIN shelters s ON s.id = mr.shelter_id
+           LEFT JOIN doctors d ON d.id = mr.assigned_doctor_id
+           LEFT JOIN hospitals h ON h.id = mr.hospital_id ORDER BY mr.id DESC"""
+    )
+    return json.dumps(rows, ensure_ascii=False, indent=2)
+
+
+def export_json_filename(kind):
+    return f"trf-{kind}-{to_iso(utcnow())[:10]}.json"
