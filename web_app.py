@@ -193,7 +193,7 @@ def build_overview(store, user=None):
     }
 
 
-def create_app(store=None, testing=False, notifier=None):
+def create_app(store=None, testing=False, notifier=None, app=None):
     app = Flask(__name__)
     secret = os.environ.get("SECRET_KEY")
     if not secret and testing:
